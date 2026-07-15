@@ -1,0 +1,27 @@
+# Optional systemd user service to start ChromePad with the graphical session.
+# A user service is required so AT-SPI, wl-copy and the Plasma tools see the session.
+#
+# @DIR@ is substituted at install time — run this from the repo:
+#   mkdir -p ~/.config/systemd/user
+#   sed "s|@DIR@|$PWD|g" systemd/chromepad.service > ~/.config/systemd/user/chromepad.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now chromepad.service
+#
+# The access token changes on every restart, so read the current QR/URL with:
+#   journalctl --user -u chromepad -n 40
+
+[Unit]
+Description=ChromePad — phone as mouse/keyboard
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=@DIR@
+ExecStart=@DIR@/.venv/bin/python -m server.app --port 8000
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,8 @@
+# ChromePad — access /dev/uinput without root.
+# TAG+="uaccess" makes systemd-logind grant an ACL to the user of the active
+# session: no group membership, no re-login, and access stays with whoever is
+# actually logged in.
+# Install:
+#   sudo cp udev/99-chromepad-uinput.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"

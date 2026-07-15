@@ -1,0 +1,6 @@
+# Python dependencies (installed in a --system-site-packages venv).
+# AT-SPI uses gi.repository.Atspi from the system packages
+# (python-gobject + at-spi2-core), so it is not listed here.
+aiohttp>=3.9
+evdev>=1.6
+qrcode>=7.4
