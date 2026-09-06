@@ -1,7 +1,7 @@
-"""
-Cursor size on KDE Plasma: enlarge on first client, restore on last / on exit.
-Reads the current value first, so an unset size goes back to the theme default.
-No-op if the Plasma tools are missing.
+"""Cursor size on KDE Plasma: enlarged on first client, restored on last.
+
+The current value is read first, so an unset size reverts to the theme default.
+No-op when the Plasma tools are missing.
 """
 
 from __future__ import annotations

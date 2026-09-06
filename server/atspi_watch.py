@@ -1,11 +1,8 @@
-"""
-Focus watcher via AT-SPI (`gi.repository.Atspi`). When an editable widget gains
-focus on the PC, we tell the phone to open its native keyboard.
+"""AT-SPI focus watcher: editable-widget focus opens the phone keyboard.
 
-Optional: python-gobject / at-spi2-core may be absent, so the import is guarded
-and the watcher simply stays off — the manual keyboard button is the fallback.
-AT-SPI does not cover every app either. Runs on a GLib thread; the callback must
-be thread-safe.
+python-gobject and at-spi2-core may be absent, so the import is guarded and the
+watcher stays off, falling back to the manual keyboard button. AT-SPI does not
+cover every app. Callbacks run on a GLib thread and must be thread-safe.
 """
 
 from __future__ import annotations

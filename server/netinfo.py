@@ -1,7 +1,4 @@
-"""
-Local LAN IP detection (skips VPN/virtual interfaces, prefers Wi-Fi) and an
-ASCII QR code for the connection URL.
-"""
+"""LAN IP detection, skipping VPN and virtual interfaces, plus an ASCII QR code."""
 
 from __future__ import annotations
 
@@ -13,10 +10,8 @@ from typing import Optional
 
 import qrcode
 
-# tun/tap (OpenVPN), wg (WireGuard) and the container/bridge prefixes are
-# generic; "nordlynx" is listed by name because NordVPN's WireGuard interface
-# does not use the wg prefix. Other vendors may need their own name here —
-# `--host <ip>` is the escape hatch.
+# "nordlynx" is named explicitly: NordVPN's WireGuard interface skips the wg
+# prefix. Other vendors may need --host <ip> instead.
 _SKIP_PREFIXES = ("lo", "nordlynx", "tun", "tap", "wg", "docker", "veth", "br-", "virbr")
 
 

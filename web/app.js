@@ -1,8 +1,7 @@
-/* ChromePad — touch client (vanilla JS). */
+/* ChromePad touch client (vanilla JS). */
 (() => {
   'use strict';
 
-  // Tunables
   const TAP_MAX_MS    = 200;
   const TAP_MAX_MOVE  = 10;    // px
   const DOUBLE_TAP_MS = 300;
@@ -44,7 +43,6 @@
 
   let mode = localStorage.getItem('chromepad.mode') === 'trackpad' ? 'trackpad' : 'joystick';
 
-  // ---- WebSocket ----
   // The QR URL carries ?k=<token>; the server rejects sockets without it.
   const qs = new URLSearchParams(location.search);
   const token = qs.get('k') || localStorage.getItem('chromepad.token') || '';
@@ -100,7 +98,6 @@
   // Latency ping + keepalive (keeps the phone Wi-Fi radio awake).
   setInterval(() => { if (wsReady) send({ t: 'ping', id: Math.round(performance.now()) }); }, 1000);
 
-  // ---- Sensitivity ----
   let sensitivity = parseFloat(localStorage.getItem('chromepad.sensitivity'));
   if (!(sensitivity > 0)) sensitivity = 1;
   sensSlider.value = sensitivity;
@@ -113,9 +110,6 @@
 
   function vibrate() { if (navigator.vibrate) navigator.vibrate(VIBRATE_MS); }
 
-  // ========================================================================
-  //  Joystick / trackpad gestures
-  // ========================================================================
   const padTouches = new Map();
   let joyActive = false;
   let joyId = null;
@@ -295,9 +289,6 @@
   pad.addEventListener('touchend', padTouchEnd, { passive: false });
   pad.addEventListener('touchcancel', padTouchEnd, { passive: false });
 
-  // ========================================================================
-  //  Scroll wheel
-  // ========================================================================
   let scrollLastY = 0, scrollAccum = 0, scrollVel = 0, scrollLastT = 0, inertiaRAF = 0;
 
   function scrollStart(e) {
@@ -339,9 +330,7 @@
   scrollEl.addEventListener('touchend', scrollEnd, { passive: false });
   scrollEl.addEventListener('touchcancel', scrollEnd, { passive: false });
 
-  // ========================================================================
-  //  Volume (drag = volume, tap speaker = mute)
-  // ========================================================================
+  // Drag the volume track for level; tap the speaker button to mute.
   let volLastY = 0, volAccum = 0;
   function volStart(e) {
     e.stopPropagation();
@@ -369,16 +358,11 @@
     vibrate();
   });
 
-  // ========================================================================
-  //  Keyboard
-  //  The hidden field always holds a zero-width guard and we cancel every real
-  //  mutation via preventDefault, so the caret is never at position 0 and
-  //  Android reliably emits deleteContentBackward even when "empty".
-  // ========================================================================
+  // Guard char keeps the caret off position 0, so Android still emits
+  // deleteContentBackward on an "empty" field.
   let composing = false;
 
-  // Batch typing: one paste per word instead of one per letter (spares the
-  // clipboard and cuts network traffic).
+  // One paste per word rather than per letter, sparing clipboard and network.
   let typeBuf = '';
   let typeTimer = 0;
   function flushText() {
@@ -449,9 +433,6 @@
   });
   kbPill.addEventListener('click', (e) => { e.preventDefault(); focusHidden(); });
 
-  // ========================================================================
-  //  Settings
-  // ========================================================================
   function openSettings()  { settingsPanel.classList.remove('hidden'); }
   function closeSettings() { settingsPanel.classList.add('hidden'); }
   settingsToggle.addEventListener('click', (e) => { e.preventDefault(); openSettings(); });
@@ -473,9 +454,6 @@
   });
   applyModeUI();
 
-  // ========================================================================
-  //  Send to PC (clipboard)
-  // ========================================================================
   function openClip()  { clipPanel.classList.remove('hidden'); setTimeout(() => clipText.focus(), 50); }
   function closeClip() { clipPanel.classList.add('hidden'); }
   function flashBtn(btn, msg) {
@@ -504,7 +482,6 @@
     setTimeout(closeClip, 750);
   });
 
-  // ---- Suppress browser gestures ----
   document.addEventListener('touchmove', (e) => {
     if (e.target.closest('.settings-panel, .clip-panel')) return;
     e.preventDefault();

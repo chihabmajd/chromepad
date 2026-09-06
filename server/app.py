@@ -42,8 +42,7 @@ WEB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web"))
 
 @web.middleware
 async def no_cache(request: web.Request, handler):
-    """Always revalidate: without this the phone can keep a stale app.js for
-    hours (heuristic caching) and reconnect with an outdated token scheme."""
+    """Without this the phone can keep a stale app.js and an outdated token scheme."""
     resp = await handler(request)
     if not resp.prepared:                       # skip the live WebSocket
         resp.headers["Cache-Control"] = "no-cache"
@@ -51,7 +50,6 @@ async def no_cache(request: web.Request, handler):
 
 
 def check_environment() -> None:
-    """ChromePad targets KDE Plasma on Wayland; warn early if this isn't it."""
     if os.environ.get("XDG_SESSION_TYPE", "").lower() != "wayland":
         print("[warn] not a Wayland session — ChromePad targets KDE Plasma on Wayland")
     if "KDE" not in os.environ.get("XDG_CURRENT_DESKTOP", "").upper():

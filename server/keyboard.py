@@ -1,11 +1,9 @@
-"""
-Keyboard / media injection for KDE Plasma on Wayland.
+"""Text input without a virtual-keyboard protocol.
 
-KWin does not implement the virtual-keyboard protocol, so text is typed by
-putting it on the clipboard (wl-copy) and sending Ctrl+V through a uinput
-device — layout- and accent-safe. The clipboard is restored once typing stops.
-Keys (backspace/enter/volume/mute) go straight through uinput.
-Everything runs on a worker thread (non-blocking, serialized).
+KWin implements none, so text goes to the clipboard (wl-copy) and Ctrl+V is sent
+through uinput, which is layout- and accent-safe. The clipboard is restored once
+typing stops. Backspace, enter, volume and mute go straight through uinput.
+Everything is serialized on a worker thread.
 """
 
 from __future__ import annotations
@@ -92,7 +90,7 @@ class KeyboardInjector:
             try:
                 kind, payload = self._q.get(timeout=1.0)
             except queue.Empty:
-                self._restore_clip()      # idle: give the clipboard back
+                self._restore_clip()
                 continue
             try:
                 if kind == "text":
