@@ -6,19 +6,25 @@ policy routing). So the PC's own Wi-Fi card becomes an access point that only
 the phone joins: PC and phone then share a private subnet (10.42.0.0/24, the
 NetworkManager "shared" default) and nothing in between can block them.
 
-The connection profile is created once and reused, so the phone remembers it.
+The NetworkManager profile only exists while ChromePad runs (created on start,
+deleted on stop), so nothing shows up in the network list otherwise. The password
+is generated once and kept in ~/.config/chromepad (mode 600), so the phone, which
+remembers the network, rejoins by itself next time.
 """
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Optional
 
 CON_NAME = "ChromePad-Hotspot"
 SSID = "ChromePad"
 SUBNET = "10.42.0.0/24"
+PSK_FILE = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "chromepad" / "hotspot-password"
 
 
 def _nmcli(*args: str, timeout: int = 20) -> subprocess.CompletedProcess:
@@ -43,24 +49,35 @@ def wired_and_wifi_idle() -> bool:
     return wired and wifi_free
 
 
-def _ensure_profile(ifname: str) -> None:
-    if _nmcli("-t", "connection", "show", CON_NAME).returncode == 0:
-        return
-    psk = secrets.token_urlsafe(9)
+def _password() -> str:
+    try:
+        psk = PSK_FILE.read_text().strip()
+        if len(psk) >= 8:
+            return psk
+    except OSError:
+        pass
+    psk = secrets.token_urlsafe(12)          # ~96 bits, WPA2 needs >= 8 chars
+    PSK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(PSK_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(psk + "\n")
+    return psk
+
+
+def _create_profile(ifname: str, psk: str) -> None:
+    _nmcli("connection", "delete", CON_NAME)          # stale one from a crash
     res = _nmcli(
         "connection", "add", "type", "wifi", "ifname", ifname, "con-name", CON_NAME,
         "autoconnect", "no", "ssid", SSID,
         "802-11-wireless.mode", "ap", "802-11-wireless.band", "bg",
         "ipv4.method", "shared", "ipv6.method", "disabled",
         "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", psk,
+        "wifi-sec.proto", "rsn", "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp",
+        # only the logged-in user can see or use the profile
+        "connection.permissions", f"user:{os.environ.get('USER', '')}",
     )
     if res.returncode != 0:
         raise RuntimeError(res.stderr.strip() or "nmcli connection add failed")
-
-
-def _password() -> str:
-    out = _nmcli("-s", "-g", "802-11-wireless-security.psk", "connection", "show", CON_NAME)
-    return out.stdout.strip()
 
 
 def start() -> tuple[str, str]:
@@ -70,16 +87,27 @@ def start() -> tuple[str, str]:
     ifname = _wifi_device()
     if not ifname:
         raise RuntimeError("no Wi-Fi device found")
-    _ensure_profile(ifname)
+    psk = _password()
+    _create_profile(ifname, psk)
     res = _nmcli("connection", "up", CON_NAME, timeout=40)
     if res.returncode != 0:
+        stop()
         raise RuntimeError(res.stderr.strip() or "could not start the hotspot")
-    return SSID, _password()
+    return SSID, psk
+
+
+def address() -> Optional[str]:
+    """The PC's address on the hotspot (10.42.0.1 by NetworkManager default)."""
+    ifname = _wifi_device()
+    out = _nmcli("-g", "IP4.ADDRESS", "device", "show", ifname or "").stdout
+    first = out.strip().split("|")[0].strip()
+    return first.split("/")[0] if first else None
 
 
 def stop() -> None:
+    """Take the hotspot down and remove the profile entirely."""
     try:
-        _nmcli("connection", "down", CON_NAME)
+        _nmcli("connection", "delete", CON_NAME)
     except Exception:
         pass
 

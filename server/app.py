@@ -212,6 +212,7 @@ class ChromePadServer:
         self.atspi = AtspiFocusWatcher(self.on_focus_change_threadsafe)
         self.atspi.start()
 
+        self._maybe_start_hotspot()
         runner = web.AppRunner(self.build_app(), access_log=None)
         await runner.setup()
         site = web.TCPSite(runner, self.host, self.port)
@@ -224,7 +225,7 @@ class ChromePadServer:
                 f"  The port may be in use. Retry with --port <other>.\n"
             )
 
-        self._maybe_start_hotspot()
+        self._print_hotspot()
         self._print_banner()
         for sig in (signal.SIGINT, signal.SIGTERM):
             self.loop.add_signal_handler(sig, self._shutdown.set)
@@ -246,6 +247,16 @@ class ChromePadServer:
             print(f"[hotspot] could not start it ({exc}); continuing without", flush=True)
             return
         self.hotspot_on = True
+        self._hotspot_creds = (ssid, psk)
+        # Listen only on the hotspot: nothing on the building network can reach us.
+        ip = hotspot.address()
+        if ip and self.host in ("0.0.0.0", ""):
+            self.host = ip
+
+    def _print_hotspot(self) -> None:
+        if not self.hotspot_on:
+            return
+        ssid, psk = self._hotspot_creds
         print("\n  1) Join the PC's Wi-Fi: scan this with the phone camera")
         print(f"     (network {ssid}, password {psk}; the phone remembers it)\n")
         print_qr(hotspot.wifi_qr_payload(ssid, psk))

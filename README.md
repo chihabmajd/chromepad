@@ -53,8 +53,11 @@ same Wi-Fi rather than typing the IP, since the URL carries the access token. Op
 When the PC is wired and its Wi-Fi card is idle, ChromePad turns the card into a
 private hotspot (`ChromePad`, WPA2, subnet `10.42.0.0/24`) and prints a second QR code
 that the phone camera uses to join it. The phone then reaches the PC directly, whatever
-the building network allows, and the hotspot is torn down on exit. The profile is kept in
-NetworkManager, so the phone reconnects on its own next time. Force or disable it with
+the building network allows, and the hotspot is torn down on exit. The phone is alone on
+the PC's own network, and ChromePad listens only on that address, so nothing on the
+building network can reach it. The NetworkManager profile exists only while ChromePad
+runs; the WPA2 (CCMP) password is generated once and kept in
+`~/.config/chromepad/hotspot-password` (mode 600), so the phone rejoins on its own. Force or disable it with
 `--hotspot on|off`. With NordVPN connected, allow that subnet once:
 `nordvpn allowlist add subnet 10.42.0.0/24`.
 
