@@ -17,8 +17,14 @@ are out of scope, see [Limitations](#limitations).
   phone's keyboard opens. A manual button is the fallback.
 - Send to PC: push text or links from the phone to the PC clipboard.
 - The access token is embedded in the QR code, so only the device that scanned it can
-  connect. A new token is generated per run.
-- Live latency readout, auto-reconnect, persisted sensitivity, haptics on click.
+  connect. It is kept across runs (`~/.config/chromepad/token`, mode 600) so a
+  home-screen bookmark keeps working; `--new-token` rotates it.
+- Live latency readout, auto-reconnect, persisted sensitivity, haptics on click
+  (including iPhone, through Safari's native switch control on iOS 18+).
+- Trackpad mode has pointer acceleration: slow movements are precise, flicks go far.
+- Smooth over flaky Wi-Fi: when the socket backs up, moves are merged instead of
+  queued, so a stall does not replay as a lurch. The QR prefers the PC's wired address,
+  since Wi-Fi power saving on the PC batches incoming packets.
 
 ## Requirements
 
@@ -46,7 +52,10 @@ re-login is needed.
 
 A QR code and a URL appear in the terminal. Scan the code from the phone's browser on the
 same Wi-Fi rather than typing the IP, since the URL carries the access token. Options:
-`--port <n>`, `--host <ip>`. `Ctrl+C` restores the cursor and quits.
+`--port <n>`, `--host <ip>`, `--new-token`. `Ctrl+C` restores the cursor and quits.
+
+On iPhone, add the page to the Home Screen (Share → Add to Home Screen): it opens full
+screen, without Safari's bars or its back-swipe from the left edge.
 
 ### On Ethernet
 

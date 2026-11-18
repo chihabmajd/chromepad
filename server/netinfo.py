@@ -47,9 +47,11 @@ def _candidate_addresses() -> list[tuple[str, str, bool]]:
 
 
 def _score(iface: str) -> int:
-    if iface.startswith(("wl", "wlan", "wlp")):
-        return 0
+    # Wired first: when the PC is on both, packets that arrive through its Wi-Fi
+    # card get batched by Wi-Fi power saving, which makes the cursor stutter.
     if iface.startswith(("en", "eth", "eno", "enp")):
+        return 0
+    if iface.startswith(("wl", "wlan", "wlp")):
         return 1
     return 2
 

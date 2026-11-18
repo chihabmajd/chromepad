@@ -9,7 +9,11 @@
   const JOY_RADIUS    = 70;    // px
   const MAX_SPEED     = 16;    // px/frame at full tilt
   const SMOOTH        = 0.65;  // velocity smoothing (higher = snappier)
-  const TRACKPAD_GAIN = 1.8;
+  const TRACKPAD_GAIN = 1.5;   // base gain for slow, precise movement
+  const ACCEL_FROM    = 0.15;  // finger speed (px/ms) where acceleration starts
+  const ACCEL_SLOPE   = 1.6;   // extra gain per px/ms above that
+  const ACCEL_MAX     = 3.2;   // cap on the acceleration multiplier
+  const SEND_BACKLOG  = 256;   // bytes queued in the socket before moves get merged
   const SCROLL_STEP   = 14;    // px per wheel notch
   const VOLUME_STEP   = 16;    // px per volume step
   const VIBRATE_MS    = 20;
@@ -72,6 +76,24 @@
     if (wsReady) { try { ws.send(JSON.stringify(obj)); } catch (_) {} }
   }
 
+  // Moves are merged rather than queued: if Wi-Fi stalls for a moment, the
+  // backlog would otherwise replay all at once and the cursor would lurch.
+  let pendDx = 0, pendDy = 0, flushRAF = 0;
+  function sendMove(dx, dy) {
+    pendDx += dx; pendDy += dy;
+    flushMoves();
+  }
+  function flushMoves() {
+    if (!pendDx && !pendDy) return;
+    if (!wsReady) { pendDx = pendDy = 0; return; }
+    if (ws.bufferedAmount > SEND_BACKLOG) {
+      if (!flushRAF) flushRAF = requestAnimationFrame(() => { flushRAF = 0; flushMoves(); });
+      return;
+    }
+    send({ t: 'm', dx: pendDx, dy: pendDy });
+    pendDx = pendDy = 0;
+  }
+
   function setStatus(cls, text) {
     statusEl.className = 'status ' + cls;
     statusText.textContent = text;
@@ -108,7 +130,23 @@
     localStorage.setItem('chromepad.sensitivity', String(sensitivity));
   });
 
-  function vibrate() { if (navigator.vibrate) navigator.vibrate(VIBRATE_MS); }
+  // Safari has no Vibration API; toggling a native switch control gives a
+  // system haptic tick on iOS 18+ (must run inside a touch handler).
+  function vibrate() {
+    if (navigator.vibrate) { navigator.vibrate(VIBRATE_MS); return; }
+    try {
+      const label = document.createElement('label');
+      label.ariaHidden = 'true';
+      label.style.display = 'none';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.setAttribute('switch', '');
+      label.appendChild(input);
+      document.head.appendChild(label);
+      label.click();
+      label.remove();
+    } catch (_) {}
+  }
 
   const padTouches = new Map();
   let joyActive = false;
@@ -124,7 +162,7 @@
   let vx = 0, vy = 0;
   let accX = 0, accY = 0;
   let rafId = 0, lastFrame = 0;
-  let lastTpX = 0, lastTpY = 0, tpAccX = 0, tpAccY = 0;
+  let lastTpX = 0, lastTpY = 0, lastTpT = 0, tpAccX = 0, tpAccY = 0;
 
   function showJoystick(x, y) {
     joyCenter = { x, y };
@@ -153,7 +191,7 @@
     accX += vx * f; accY += vy * f;               // sub-pixel accumulation
     const dx = Math.trunc(accX), dy = Math.trunc(accY);
     accX -= dx; accY -= dy;
-    if (dx || dy) send({ t: 'm', dx, dy });
+    if (dx || dy) sendMove(dx, dy);
     rafId = joyActive ? requestAnimationFrame(frame) : 0;
   }
   function startSendLoop() {
@@ -196,18 +234,20 @@
       if (now - lastTapT < DOUBLE_TAP_MS) {        // double-tap then hold = drag
         dragMode = true;
         send({ t: 'dn' });
+        vibrate();
       } else {
         dragMode = false;
       }
       if (mode === 'trackpad') {
-        lastTpX = t.clientX; lastTpY = t.clientY;
+        lastTpX = t.clientX; lastTpY = t.clientY; lastTpT = e.timeStamp;
         tpAccX = tpAccY = 0;
         joyActive = true;
       } else {
         showJoystick(touchStartX, touchStartY);
         startSendLoop();
       }
-    } else if (count === 2 && !moved) {            // two-finger tap = right-click
+    } else if (count === 2 && !moved) {
+      pendDx = pendDy = 0;            // two-finger tap = right-click
       twoFinger = true;
       twoFingerT = now;
       targetVx = targetVy = vx = vy = 0;
@@ -222,13 +262,17 @@
     for (const ct of e.changedTouches) if (ct.identifier === joyId) { t = ct; break; }
     if (!t) return;
     const dx = t.clientX - lastTpX, dy = t.clientY - lastTpY;
-    lastTpX = t.clientX; lastTpY = t.clientY;
+    const dt = Math.max(e.timeStamp - lastTpT, 1);
+    lastTpX = t.clientX; lastTpY = t.clientY; lastTpT = e.timeStamp;
     if (Math.hypot(t.clientX - touchStartX, t.clientY - touchStartY) > TAP_MAX_MOVE) moved = true;
-    const g = TRACKPAD_GAIN * sensitivity;
+    // Pointer acceleration, like a laptop touchpad: slow = precise, flick = far.
+    const speed = Math.hypot(dx, dy) / dt;
+    const accel = Math.min(1 + Math.max(speed - ACCEL_FROM, 0) * ACCEL_SLOPE, ACCEL_MAX);
+    const g = TRACKPAD_GAIN * sensitivity * accel;
     tpAccX += dx * g; tpAccY += dy * g;
     const ix = Math.trunc(tpAccX), iy = Math.trunc(tpAccY);
     tpAccX -= ix; tpAccY -= iy;
-    if (ix || iy) send({ t: 'm', dx: ix, dy: iy });
+    if (ix || iy) sendMove(ix, iy);
   }
 
   function padTouchMove(e) {
@@ -432,6 +476,11 @@
     else focusHidden();
   });
   kbPill.addEventListener('click', (e) => { e.preventDefault(); focusHidden(); });
+
+  // Only Safari tabs (not the home-screen app) get the tip.
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS && !navigator.standalone) document.getElementById('home-tip').classList.remove('hidden');
 
   function openSettings()  { settingsPanel.classList.remove('hidden'); }
   function closeSettings() { settingsPanel.classList.add('hidden'); }

@@ -8,6 +8,9 @@
   <meta name="theme-color" content="#262523" media="(prefers-color-scheme: dark)" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="ChromePad" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
   <title>ChromePad</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -84,6 +87,11 @@
       <button type="button" class="seg-btn" data-mode="joystick">Joystick</button>
       <button type="button" class="seg-btn" data-mode="trackpad">Trackpad</button>
     </div>
+
+    <p id="home-tip" class="home-tip hidden">
+      Tip: Share → <b>Add to Home Screen</b> for a full-screen pad without Safari's
+      bars or its back-swipe on the left edge.
+    </p>
 
     <button id="settings-close" class="btn-primary">Close</button>
   </div>

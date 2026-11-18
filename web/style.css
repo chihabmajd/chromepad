@@ -455,6 +455,26 @@ input[type="range"]::-moz-range-thumb {
   z-index: -1;
 }
 
+/* ---- iPhone: keep clear of the notch / Dynamic Island and home bar ---- */
+#topbar {
+  height: calc(56px + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+  padding-left: calc(12px + env(safe-area-inset-left));
+  padding-right: calc(12px + env(safe-area-inset-right));
+}
+.scroll { right: calc(14px + env(safe-area-inset-right)); }
+.volume { left: calc(14px + env(safe-area-inset-left)); }
+.kb-pill { top: calc(66px + env(safe-area-inset-top)); }
+/* Safari zooms the page when a field under 16px gets focus */
+.hidden-input, .clip-text { font-size: 16px; }
+
+.home-tip {
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 .hidden { display: none !important; }
 
 @media (prefers-reduced-motion: reduce) {

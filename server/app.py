@@ -4,7 +4,8 @@ ChromePad server (KDE Plasma / Wayland): serves the web page, receives phone
 events over WebSocket and injects them on the PC via uinput.
 
 The QR URL carries a random token (?k=...) that the WebSocket checks, so a
-stray device on the LAN cannot take over the mouse. A new token per run.
+stray device on the LAN cannot take over the mouse. The token is kept across runs
+(~/.config/chromepad/token, mode 600); --new-token rotates it.
 
 Phone -> PC (compact JSON):
     {"t":"m","dx":..,"dy":..}  relative move        {"t":"c","b":"l"|"r"}  click
@@ -27,6 +28,7 @@ import os
 import secrets
 import signal
 import socket
+from pathlib import Path
 from typing import Optional, Set
 
 from aiohttp import WSMsgType, web
@@ -39,6 +41,27 @@ from . import hotspot
 from .netinfo import detect_local_ip, print_qr, vpn_blocked_subnet
 
 WEB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web"))
+TOKEN_FILE = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "chromepad" / "token"
+
+
+def load_token(rotate: bool = False) -> str:
+    """Token kept across runs (mode 600) so a home-screen bookmark keeps working.
+
+    `--new-token` rotates it, which locks out every phone that had the old one.
+    """
+    if not rotate:
+        try:
+            tok = TOKEN_FILE.read_text().strip()
+            if len(tok) >= 16:
+                return tok
+        except OSError:
+            pass
+    tok = secrets.token_urlsafe(18)
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(tok + "\n")
+    return tok
 
 
 @web.middleware
@@ -50,6 +73,15 @@ async def no_cache(request: web.Request, handler):
     return resp
 
 
+def _clamp(v, limit: int = 2000) -> int:
+    """A number from the phone, bounded; garbage becomes 0 instead of an exception
+    that would drop the connection."""
+    try:
+        return max(-limit, min(limit, int(v)))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
 def check_environment() -> None:
     if os.environ.get("XDG_SESSION_TYPE", "").lower() != "wayland":
         print("[warn] not a Wayland session — ChromePad targets KDE Plasma on Wayland")
@@ -58,12 +90,13 @@ def check_environment() -> None:
 
 
 class ChromePadServer:
-    def __init__(self, host: str, port: int, hotspot_mode: str = "auto") -> None:
+    def __init__(self, host: str, port: int, hotspot_mode: str = "auto",
+                 token: str = "") -> None:
         self.host = host
         self.hotspot_mode = hotspot_mode
         self.hotspot_on = False
         self.port = port
-        self.token = secrets.token_urlsafe(9)
+        self.token = token or secrets.token_urlsafe(18)
         self.mouse: Optional[VirtualMouse] = None
         self.keyboard = KeyboardInjector()
         self.cursor = CursorManager(big_size=48)
@@ -167,11 +200,11 @@ class ChromePadServer:
             m = json.loads(raw)
         except (ValueError, TypeError):
             return
-        if self.mouse is None:
+        if self.mouse is None or not isinstance(m, dict):
             return
         t = m.get("t")
         if t == "m":
-            self.mouse.move(m.get("dx", 0), m.get("dy", 0))
+            self.mouse.move(_clamp(m.get("dx")), _clamp(m.get("dy")))
         elif t == "c":
             self.mouse.right_click() if m.get("b") == "r" else self.mouse.left_click()
         elif t == "dn":
@@ -179,7 +212,7 @@ class ChromePadServer:
         elif t == "up":
             self.mouse.left_up()
         elif t == "w":
-            self.mouse.scroll(m.get("d", 0))
+            self.mouse.scroll(_clamp(m.get("d"), 20))
         elif t == "kt":
             self.keyboard.type_text(m.get("v", ""))
         elif t == "kb":
@@ -187,7 +220,7 @@ class ChromePadServer:
         elif t == "ke":
             self.keyboard.enter()
         elif t == "vol":
-            self.keyboard.volume_up() if m.get("d", 0) > 0 else self.keyboard.volume_down()
+            self.keyboard.volume_up() if _clamp(m.get("d")) > 0 else self.keyboard.volume_down()
         elif t == "mute":
             self.keyboard.mute()
         elif t == "clip":
@@ -309,9 +342,12 @@ def main() -> None:
     parser.add_argument("--hotspot", choices=("auto", "on", "off"), default="auto",
                         help="share a private Wi-Fi hotspot with the phone "
                              "(auto: only when on Ethernet with Wi-Fi idle)")
+    parser.add_argument("--new-token", action="store_true",
+                        help="generate a new access token (phones must rescan the QR)")
     args = parser.parse_args()
 
-    server = ChromePadServer(args.host, args.port, args.hotspot)
+    server = ChromePadServer(args.host, args.port, args.hotspot,
+                             token=load_token(rotate=args.new_token))
     try:
         asyncio.run(server.run())
     except KeyboardInterrupt:
