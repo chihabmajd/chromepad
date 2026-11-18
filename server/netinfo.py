@@ -69,6 +69,28 @@ def detect_local_ip() -> Optional[str]:
         return None
 
 
+def vpn_blocked_subnet(ip: str) -> Optional[str]:
+    """Subnet of `ip` if replies to other hosts on it would leave through a VPN.
+
+    NordVPN-style policy routing sends everything, LAN replies included, into the
+    tunnel unless the subnet is allowlisted: the phone's connection then hangs
+    half-open and the page never loads.
+    """
+    try:
+        data = json.loads(subprocess.run(["ip", "-json", "-4", "addr"], capture_output=True,
+                                         text=True, timeout=2).stdout)
+        net = next(ipaddress.ip_interface(f"{a['local']}/{a['prefixlen']}").network
+                   for link in data for a in link.get("addr_info", [])
+                   if a.get("local") == ip)
+        peer = next(h for h in net.hosts() if str(h) != ip)
+        route = json.loads(subprocess.run(["ip", "-json", "route", "get", str(peer)],
+                                          capture_output=True, text=True, timeout=2).stdout)
+    except Exception:
+        return None
+    dev = (route[0] if route else {}).get("dev", "")
+    return str(net) if dev.startswith(_SKIP_PREFIXES) and not dev.startswith("lo") else None
+
+
 def print_qr(url: str) -> None:
     qr = qrcode.QRCode(border=1)
     qr.add_data(url)

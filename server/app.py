@@ -36,7 +36,7 @@ from .cursor import CursorManager
 from .keyboard import KeyboardInjector
 from .mouse import VirtualMouse
 from . import hotspot
-from .netinfo import detect_local_ip, print_qr
+from .netinfo import detect_local_ip, print_qr, vpn_blocked_subnet
 
 WEB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web"))
 
@@ -279,6 +279,11 @@ class ChromePadServer:
         print("  Scan this QR code from Chrome on your phone:\n")
         if ip:
             print_qr(url)
+            blocked = vpn_blocked_subnet(ip)
+            if blocked:
+                print("  [!] The VPN would swallow replies to the phone, so the page would")
+                print("      never load. Allow this local subnet once (internet traffic")
+                print(f"      stays on the VPN):\n        nordvpn allowlist add subnet {blocked}\n")
         else:
             print("  [!] Local IP not found — restart with --host <your_lan_ip>")
             print(f"      then open  http://<your_lan_ip>:{self.port}/?k={self.token}\n")
