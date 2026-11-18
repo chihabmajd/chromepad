@@ -48,6 +48,19 @@ A QR code and a URL appear in the terminal. Scan the code from the phone's brows
 same Wi-Fi rather than typing the IP, since the URL carries the access token. Options:
 `--port <n>`, `--host <ip>`. `Ctrl+C` restores the cursor and quits.
 
+### On Ethernet
+
+When the PC is wired and its Wi-Fi card is idle, ChromePad turns the card into a
+private hotspot (`ChromePad`, WPA2, subnet `10.42.0.0/24`) and prints a second QR code
+that the phone camera uses to join it. The phone then reaches the PC directly, whatever
+the building network allows, and the hotspot is torn down on exit. The profile is kept in
+NetworkManager, so the phone reconnects on its own next time. Force or disable it with
+`--hotspot on|off`. With NordVPN connected, allow that subnet once:
+`nordvpn allowlist add subnet 10.42.0.0/24`.
+
+Networks that hand out public addresses (campus, enterprise) are detected too; private
+addresses are preferred.
+
 ChromePad skips VPN interfaces when detecting the LAN IP. If the phone still cannot reach
 the PC, allow the local subnet in the VPN, for example
 `nordvpn allowlist add subnet 192.168.1.0/24`.

@@ -35,6 +35,7 @@ from .atspi_watch import AtspiFocusWatcher
 from .cursor import CursorManager
 from .keyboard import KeyboardInjector
 from .mouse import VirtualMouse
+from . import hotspot
 from .netinfo import detect_local_ip, print_qr
 
 WEB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web"))
@@ -57,8 +58,10 @@ def check_environment() -> None:
 
 
 class ChromePadServer:
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(self, host: str, port: int, hotspot_mode: str = "auto") -> None:
         self.host = host
+        self.hotspot_mode = hotspot_mode
+        self.hotspot_on = False
         self.port = port
         self.token = secrets.token_urlsafe(9)
         self.mouse: Optional[VirtualMouse] = None
@@ -221,6 +224,7 @@ class ChromePadServer:
                 f"  The port may be in use. Retry with --port <other>.\n"
             )
 
+        self._maybe_start_hotspot()
         self._print_banner()
         for sig in (signal.SIGINT, signal.SIGTERM):
             self.loop.add_signal_handler(sig, self._shutdown.set)
@@ -229,6 +233,27 @@ class ChromePadServer:
         print("\n[server] shutting down…")
         await runner.cleanup()
         self.cleanup()
+
+    def _maybe_start_hotspot(self) -> None:
+        wanted = self.hotspot_mode == "on" or (
+            self.hotspot_mode == "auto" and hotspot.wired_and_wifi_idle())
+        if not wanted:
+            return
+        print("[hotspot] on Ethernet with Wi-Fi idle: starting a private hotspot…", flush=True)
+        try:
+            ssid, psk = hotspot.start()
+        except Exception as exc:
+            print(f"[hotspot] could not start it ({exc}); continuing without", flush=True)
+            return
+        self.hotspot_on = True
+        print("\n  1) Join the PC's Wi-Fi: scan this with the phone camera")
+        print(f"     (network {ssid}, password {psk}; the phone remembers it)\n")
+        print_qr(hotspot.wifi_qr_payload(ssid, psk))
+        fix = hotspot.vpn_blocks_subnet()
+        if fix:
+            print("  [!] The VPN would swallow replies to the phone. Allow the hotspot")
+            print(f"      subnet once (only this private range bypasses the VPN):\n        {fix}\n")
+        print("  2) Then open ChromePad from the QR below.", flush=True)
 
     def _print_banner(self) -> None:
         ip = self.host if self.host not in ("0.0.0.0", "") else detect_local_ip()
@@ -249,6 +274,10 @@ class ChromePadServer:
         print("  Ctrl+C to quit.\n", flush=True)   # stdout is block-buffered off a tty
 
     def cleanup(self) -> None:
+        if self.hotspot_on:
+            hotspot.stop()
+            self.hotspot_on = False
+            print("[hotspot] stopped", flush=True)
         if self.atspi:
             self.atspi.stop()
         self.cursor.restore()
@@ -261,9 +290,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="ChromePad — phone as mouse/keyboard")
     parser.add_argument("--host", default="0.0.0.0", help="listen address")
     parser.add_argument("--port", type=int, default=8000, help="port (default 8000)")
+    parser.add_argument("--hotspot", choices=("auto", "on", "off"), default="auto",
+                        help="share a private Wi-Fi hotspot with the phone "
+                             "(auto: only when on Ethernet with Wi-Fi idle)")
     args = parser.parse_args()
 
-    server = ChromePadServer(args.host, args.port)
+    server = ChromePadServer(args.host, args.port, args.hotspot)
     try:
         asyncio.run(server.run())
     except KeyboardInterrupt:
